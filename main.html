@@ -73,19 +73,30 @@
 
     <div id="hud">Selected: Grass</div>
 
-    <!-- Three.js Library -->
+    <!-- Three.js Library (Primary CDN) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <!-- PointerLockControls for FPS camera -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+    <!-- Fallback CDN just in case cdnjs is blocked -->
+    <script>
+        if (typeof THREE === 'undefined') {
+            document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js"><\/script>');
+        }
+    </script>
 
     <script>
+        // Global error catcher: If Three.js still fails to load, show an error instead of silently failing
+        window.onerror = function(message, source, lineno, colno, error) {
+            if (typeof THREE === 'undefined') {
+                document.body.innerHTML = '<div style="color:white; background:black; padding:50px; font-family:monospace; position:absolute; top:0; left:0; width:100%; height:100%; z-index:1000;">GAME CRASHED:<br>Could not load Three.js library. Please check your internet connection.<br><br>Error: ' + message + '</div>';
+            }
+        };
+
         // --- 1. SETUP SCENE, CAMERA, RENDERER ---
         const scene = new THREE.Scene();
         scene.background = new THREE.Color(0x87CEEB); // Sky blue
         scene.fog = new THREE.Fog(0x87CEEB, 20, 60); // Fog for performance and aesthetics
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.set(0, 10, 0);
+        camera.rotation.order = 'YXZ'; // Essential for FPS camera rotation
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -99,16 +110,13 @@
         directionalLight.position.set(10, 20, 10);
         scene.add(directionalLight);
 
-        // --- 3. PROCEDURAL TEXTURES ---
-        // We generate textures via canvas to avoid external image files
+        // --- 3. PROCEDURAL TEXTURES & MATERIALS ---
         function createTexture(color, noiseColor) {
             const canvas = document.createElement('canvas');
             canvas.width = 16; canvas.height = 16;
             const ctx = canvas.getContext('2d');
             ctx.fillStyle = color;
             ctx.fillRect(0, 0, 16, 16);
-            
-            // Add noise for a pixelated, blocky look
             for (let i = 0; i < 16; i++) {
                 for (let j = 0; j < 16; j++) {
                     if (Math.random() > 0.8) {
@@ -118,14 +126,16 @@
                 }
             }
             const texture = new THREE.CanvasTexture(canvas);
-            texture.magFilter = THREE.NearestFilter; // Keep it crisp
+            texture.magFilter = THREE.NearestFilter;
+            texture.minFilter = THREE.NearestFilter;
             return texture;
         }
 
-        const textures = {
-            grass: createTexture('#55aa55', '#4a9a4a'),
-            dirt: createTexture('#8b5a2b', '#7a4a1b'),
-            stone: createTexture('#888888', '#777777')
+        // Cache materials to save performance
+        const materials = {
+            grass: new THREE.MeshLambertMaterial({ map: createTexture('#55aa55', '#4a9a4a') }),
+            dirt: new THREE.MeshLambertMaterial({ map: createTexture('#8b5a2b', '#7a4a1b') }),
+            stone: new THREE.MeshLambertMaterial({ map: createTexture('#888888', '#777777') })
         };
 
         // --- 4. WORLD GENERATION ---
@@ -133,12 +143,11 @@
         const worldSize = 16;
         const geometry = new THREE.BoxGeometry(1, 1, 1);
 
-        function getBlockKey(x, y, z) { return `${x},${y},${z}`; }
+        function getBlockKey(x, y, z) { return `${Math.round(x)},${Math.round(y)},${Math.round(z)}`; }
 
         function addBlock(x, y, z, type) {
-            const material = new THREE.MeshLambertMaterial({ map: textures[type] });
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.set(x, y, z);
+            const mesh = new THREE.Mesh(geometry, materials[type]);
+            mesh.position.set(Math.round(x), Math.round(y), Math.round(z));
             mesh.userData.type = type;
             scene.add(mesh);
             blocks.set(getBlockKey(x, y, z), mesh);
@@ -146,7 +155,7 @@
 
         // Simple noise function using sine waves
         function getTerrainHeight(x, z) {
-            return Math.floor(Math.sin(x * 0.3) * 2 + Math.cos(z * 0.3) * 2 + 3);
+            return Math.floor(Math.sin(x * 0.3) * 2 + Math.cos(z * 0.3) * 2 + 5);
         }
 
         // Generate a small island
@@ -160,20 +169,51 @@
             }
         }
 
-        // --- 5. CONTROLS ---
-        const controls = new THREE.PointerLockControls(camera, document.body);
+        // --- 5. GAME STATE & POINTER LOCK ---
+        let isPlaying = false; // <--- This is the fix. We decouple game logic from pointer lock state
+        let yaw = 0, pitch = 0;
         const overlay = document.getElementById('overlay');
         
-        overlay.addEventListener('click', () => { controls.lock(); });
-        controls.addEventListener('lock', () => { overlay.style.display = 'none'; });
-        controls.addEventListener('unlock', () => { overlay.style.display = 'flex'; });
+        overlay.addEventListener('click', () => {
+            isPlaying = true;
+            overlay.style.display = 'none'; // Hide overlay immediately
+            
+            // Attempt to lock pointer (works in normal browser tabs, may fail in iframes)
+            const el = renderer.domElement;
+            if (el.requestPointerLock) {
+                el.requestPointerLock();
+            } else if (el.mozRequestPointerLock) {
+                el.mozRequestPointerLock();
+            } else if (el.webkitRequestPointerLock) {
+                el.webkitRequestPointerLock();
+            }
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            // If the user presses ESC and unlocks the mouse, pause the game
+            if (document.pointerLockElement !== renderer.domElement && isPlaying) {
+                isPlaying = false;
+                overlay.style.display = 'flex';
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (isPlaying) {
+                yaw -= e.movementX * 0.002;
+                pitch -= e.movementY * 0.002;
+                pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
+                camera.rotation.y = yaw;
+                camera.rotation.x = pitch;
+            }
+        });
 
         // Movement state
         const move = { forward: false, backward: false, left: false, right: false, jump: false };
         const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
+        let onGround = false;
         
         document.addEventListener('keydown', (e) => {
+            if (!isPlaying) return;
             switch(e.code) {
                 case 'KeyW': move.forward = true; break;
                 case 'KeyS': move.backward = true; break;
@@ -212,28 +252,37 @@
         }
 
         document.addEventListener('mousedown', (e) => {
-            if (!controls.isLocked) return;
+            if (!isPlaying) return; // <--- Only allow breaking blocks if game is playing
             
             raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
             const intersects = raycaster.intersectObjects(Array.from(blocks.values()));
 
             if (intersects.length > 0) {
                 const hit = intersects[0];
+                const blockPos = hit.object.position;
                 
                 // Left click: Break block
                 if (e.button === 0) {
-                    const pos = hit.object.position;
-                    const key = getBlockKey(pos.x, pos.y, pos.z);
+                    const key = getBlockKey(blockPos.x, blockPos.y, blockPos.z);
                     scene.remove(hit.object);
                     blocks.delete(key);
                 } 
                 // Right click: Place block
                 else if (e.button === 2) {
-                    const placePos = hit.object.position.clone().add(hit.face.normal);
+                    const intersectPoint = hit.point;
+                    const dx = intersectPoint.x - blockPos.x;
+                    const dy = intersectPoint.y - blockPos.y;
+                    const dz = intersectPoint.z - blockPos.z;
+                    
+                    let nx = 0, ny = 0, nz = 0;
+                    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > Math.abs(dz)) nx = Math.sign(dx);
+                    else if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > Math.abs(dz)) ny = Math.sign(dy);
+                    else nz = Math.sign(dz);
+                    
+                    const placePos = blockPos.clone().add(new THREE.Vector3(nx, ny, nz));
                     
                     // Prevent placing block inside the player
-                    const distToPlayer = placePos.distanceTo(camera.position);
-                    if (distToPlayer > 1.5) {
+                    if (placePos.distanceTo(camera.position) > 2.0) {
                         addBlock(placePos.x, placePos.y, placePos.z, selectedBlockType);
                     }
                 }
@@ -243,24 +292,22 @@
         // Prevent context menu on right click
         document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // --- 7. PHYSICS & COLLISION ---
-        const playerHeight = 1.8;
-        const playerWidth = 0.6;
-        let onGround = false;
-
+        // --- 7. PHYSICS & AABB COLLISION DETECTION ---
         function checkCollision(x, y, z) {
-            // Player is treated as an AABB (Axis-Aligned Bounding Box)
-            // Check blocks around the player's feet and head
-            const minX = Math.floor(x - playerWidth / 2);
-            const maxX = Math.floor(x + playerWidth / 2);
-            const minY = Math.floor(y - playerHeight);
-            const maxY = Math.floor(y);
-            const minZ = Math.floor(z - playerWidth / 2);
-            const maxZ = Math.floor(z + playerWidth / 2);
+            const playerWidth = 0.3;
+            const playerHeight = 1.8;
+            const feetY = y - playerHeight;
+            
+            const startX = Math.floor(x - playerWidth + 0.5);
+            const endX = Math.floor(x + playerWidth + 0.5);
+            const startY = Math.floor(feetY + 0.5);
+            const endY = Math.floor(y + 0.5);
+            const startZ = Math.floor(z - playerWidth + 0.5);
+            const endZ = Math.floor(z + playerWidth + 0.5);
 
-            for (let bx = minX; bx <= maxX; bx++) {
-                for (let by = minY; by <= maxY; by++) {
-                    for (let bz = minZ; bz <= maxZ; bz++) {
+            for (let bx = startX; bx <= endX; bx++) {
+                for (let by = startY; by <= endY; by++) {
+                    for (let bz = startZ; bz <= endZ; bz++) {
                         if (blocks.has(getBlockKey(bx, by, bz))) {
                             return true;
                         }
@@ -274,55 +321,68 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            if (controls.isLocked) {
-                // Apply gravity
-                velocity.y -= 0.015; // Gravity strength
-                if (velocity.y < -0.5) velocity.y = -0.5; // Terminal velocity
+            try {
+                if (isPlaying) { // <--- Only run physics if playing
+                    // Apply gravity
+                    velocity.y -= 0.015; 
+                    if (velocity.y < -0.5) velocity.y = -0.5; 
 
-                // Calculate movement direction
-                direction.z = Number(move.forward) - Number(move.backward);
-                direction.x = Number(move.right) - Number(move.left);
-                direction.normalize();
+                    // Calculate movement direction based on yaw
+                    const speed = 0.15;
+                    const forwardX = -Math.sin(yaw);
+                    const forwardZ = -Math.cos(yaw);
+                    const rightX = Math.cos(yaw);
+                    const rightZ = -Math.sin(yaw);
 
-                const speed = 0.15;
-                let dx = 0, dz = 0;
-                
-                if (move.forward || move.backward) dz = direction.z * speed;
-                if (move.left || move.right) dx = direction.x * speed;
+                    let moveX = 0, moveZ = 0;
+                    if (move.forward) { moveX += forwardX; moveZ += forwardZ; }
+                    if (move.backward) { moveX -= forwardX; moveZ -= forwardZ; }
+                    if (move.right) { moveX += rightX; moveZ += rightZ; }
+                    if (move.left) { moveX -= rightX; moveZ -= rightZ; }
 
-                // Jump
-                if (move.jump && onGround) {
-                    velocity.y = 0.25; // Jump height
-                    onGround = false;
-                }
-
-                // Attempt X axis movement
-                let newX = camera.position.x + dx;
-                if (!checkCollision(newX, camera.position.y, camera.position.z)) {
-                    camera.position.x = newX;
-                }
-
-                // Attempt Z axis movement
-                let newZ = camera.position.z + dz;
-                if (!checkCollision(camera.position.x, camera.position.y, newZ)) {
-                    camera.position.z = newZ;
-                }
-
-                // Attempt Y axis movement
-                let newY = camera.position.y + velocity.y;
-                if (!checkCollision(camera.position.x, newY, camera.position.z)) {
-                    camera.position.y = newY;
-                    onGround = false;
-                } else {
-                    // If we hit something while falling, we are on the ground
-                    if (velocity.y < 0) {
-                        onGround = true;
+                    // Normalize diagonal movement so it's not faster
+                    const len = Math.hypot(moveX, moveZ);
+                    if (len > 0) {
+                        moveX = (moveX / len) * speed;
+                        moveZ = (moveZ / len) * speed;
                     }
-                    velocity.y = 0;
-                }
-            }
 
-            renderer.render(scene, camera);
+                    // Jump
+                    if (move.jump && onGround) {
+                        velocity.y = 0.25; 
+                        onGround = false;
+                    }
+
+                    // Attempt X axis movement
+                    let newX = camera.position.x + moveX;
+                    if (!checkCollision(newX, camera.position.y, camera.position.z)) {
+                        camera.position.x = newX;
+                    }
+
+                    // Attempt Z axis movement
+                    let newZ = camera.position.z + moveZ;
+                    if (!checkCollision(camera.position.x, camera.position.y, newZ)) {
+                        camera.position.z = newZ;
+                    }
+
+                    // Attempt Y axis movement (Falling/Jumping)
+                    let newY = camera.position.y + velocity.y;
+                    if (!checkCollision(camera.position.x, newY, camera.position.z)) {
+                        camera.position.y = newY;
+                        onGround = false;
+                    } else {
+                        // If we hit something while falling, we are on the ground
+                        if (velocity.y < 0) {
+                            onGround = true;
+                        }
+                        velocity.y = 0;
+                    }
+                }
+
+                renderer.render(scene, camera);
+            } catch (err) {
+                console.error("Game loop error:", err);
+            }
         }
 
         // Handle window resize
@@ -332,8 +392,8 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        // Set initial spawn position above the terrain
-        camera.position.y = getTerrainHeight(0, 0) + 3;
+        // Set initial spawn position slightly above the terrain
+        camera.position.set(0, getTerrainHeight(0, 0) + 3, 0);
 
         animate();
     </script>
