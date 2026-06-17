@@ -13,10 +13,9 @@
             width: 24px; height: 24px; pointer-events: none; z-index: 10;
             display: none;
         }
-        /* Plus sign crosshair */
         #crosshair::before, #crosshair::after {
             content: ''; position: absolute; background: #ffffff;
-            mix-blend-mode: difference; /* Makes it visible on any background */
+            mix-blend-mode: difference;
         }
         #crosshair::before { width: 2px; height: 22px; left: 11px; top: 1px; }
         #crosshair::after { width: 22px; height: 2px; top: 11px; left: 1px; }
@@ -35,7 +34,9 @@
             width: 45px; height: 45px; background: rgba(255,255,255,0.1);
             border: 2px solid rgba(255,255,255,0.2); display: flex; 
             justify-content: center; align-items: center; font-size: 24px; color: white;
+            image-rendering: pixelated;
         }
+        .slot img { width: 32px; height: 32px; image-rendering: pixelated; }
         .slot.active { border-color: white; background: rgba(255,255,255,0.4); box-shadow: 0 0 10px rgba(255,255,255,0.3); }
         
         #overlay {
@@ -57,18 +58,18 @@
         <p style="font-size: 0.9em; opacity: 0.7; margin-top: 20px;">
             <span class="key">WASD</span> Move | <span class="key">Space</span> Jump | <span class="key">Mouse</span> Look<br>
             <span class="key">L-Click</span> Break | <span class="key">R-Click</span> Place<br>
-            <span class="key">1-5</span> or <span class="key">Scroll</span> Select Block | <span class="key">F2</span> Pause
+            <span class="key">1-5</span> or <span class="key">Scroll</span> Select Block | <span class="key">F5</span> View | <span class="key">F2</span> Pause
         </p>
     </div>
 
     <div id="crosshair"></div>
     
     <div id="hotbar">
-        <div class="slot active" id="slot-1" style="background:#6FAA36"></div>
-        <div class="slot" id="slot-2" style="background:#8C6239"></div>
-        <div class="slot" id="slot-3" style="background:#7E7E7E"></div>
-        <div class="slot" id="slot-4" style="background:#6E5326"></div>
-        <div class="slot" id="slot-5" style="background:#3F8A22"></div>
+        <div class="slot active" id="slot-1"><img id="icon-1" src=""></div>
+        <div class="slot" id="slot-2"><img id="icon-2" src=""></div>
+        <div class="slot" id="slot-3"><img id="icon-3" src=""></div>
+        <div class="slot" id="slot-4"><img id="icon-4" src=""></div>
+        <div class="slot" id="slot-5"><img id="icon-5" src=""></div>
     </div>
 
     <div id="hud">Selected: Grass</div>
@@ -77,7 +78,7 @@
     <script>
         // --- 1. GLOBAL CONFIG ---
         const CHUNK_SIZE = 16;
-        const WORLD_HEIGHT = 64; // Deep world
+        const WORLD_HEIGHT = 64;
         const RENDER_DISTANCE = 3;
         const AIR = 0, GRASS = 1, DIRT = 2, STONE = 3, WOOD = 4, LEAVES = 5, BEDROCK = 6;
 
@@ -110,7 +111,7 @@
 
         // --- 3. THREE.JS SETUP ---
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x78A7FF); // Authentic MC Sky
+        scene.background = new THREE.Color(0x78A7FF);
         scene.fog = new THREE.Fog(0x78A7FF, CHUNK_SIZE * (RENDER_DISTANCE - 1), CHUNK_SIZE * RENDER_DISTANCE);
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -119,10 +120,9 @@
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Authentic MC Lighting (Hemisphere + Directional)
-        const hemiLight = new THREE.HemisphereLight(0xCEE9FF, 0x6E5A3E, 0.6);
-        scene.add(hemiLight);
-        const dirLight = new THREE.DirectionalLight(0xFFFFFF, 0.7);
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
         dirLight.position.set(50, 100, 50);
         scene.add(dirLight);
 
@@ -140,67 +140,47 @@
             function px(ctx, x, y, color) { ctx.fillStyle = color; ctx.fillRect(x, y, 1, 1); }
             function r() { return Math.random(); }
             
-            // 0: Grass Top
-            drawTile(0, ctx => {
+            drawTile(0, ctx => { // Grass Top
                 ctx.fillStyle = '#6FAA36'; ctx.fillRect(0, 0, 16, 16);
                 for(let i=0; i<40; i++) px(ctx, Math.floor(r()*16), Math.floor(r()*16), r() > 0.5 ? '#5D9A2B' : '#7DB83F');
             });
-            // 1: Grass Side
-            drawTile(1, ctx => {
+            drawTile(1, ctx => { // Grass Side
                 ctx.fillStyle = '#8C6239'; ctx.fillRect(0, 0, 16, 16);
                 for(let i=0; i<30; i++) px(ctx, Math.floor(r()*16), Math.floor(r()*16), '#79502D');
                 ctx.fillStyle = '#6FAA36'; ctx.fillRect(0, 0, 16, 4);
-                for(let x=0; x<16; x++) {
-                    let drip = 3 + Math.floor(r() * 3);
-                    for(let y=0; y<drip; y++) px(ctx, x, y, r() > 0.5 ? '#6FAA36' : '#5D9A2B');
-                }
+                for(let x=0; x<16; x++) { let drip = 3 + Math.floor(r() * 3); for(let y=0; y<drip; y++) px(ctx, x, y, r() > 0.5 ? '#6FAA36' : '#5D9A2B'); }
             });
-            // 2: Dirt
-            drawTile(2, ctx => {
+            drawTile(2, ctx => { // Dirt
                 ctx.fillStyle = '#8C6239'; ctx.fillRect(0, 0, 16, 16);
                 for(let i=0; i<50; i++) px(ctx, Math.floor(r()*16), Math.floor(r()*16), r() > 0.5 ? '#79502D' : '#9C7043');
                 for(let i=0; i<8; i++) px(ctx, Math.floor(r()*16), Math.floor(r()*16), '#4A4A4A');
             });
-            // 3: Stone
-            drawTile(3, ctx => {
+            drawTile(3, ctx => { // Stone
                 ctx.fillStyle = '#7E7E7E'; ctx.fillRect(0, 0, 16, 16);
                 for(let i=0; i<60; i++) px(ctx, Math.floor(r()*16), Math.floor(r()*16), r() > 0.5 ? '#6B6B6B' : '#919191');
-                ctx.fillStyle = '#555555'; // Crack
-                ctx.fillRect(3, 5, 2, 1); ctx.fillRect(4, 6, 1, 1); ctx.fillRect(4, 7, 1, 1); ctx.fillRect(3, 8, 1, 1);
+                ctx.fillStyle = '#555555'; ctx.fillRect(3, 5, 2, 1); ctx.fillRect(4, 6, 1, 1); ctx.fillRect(4, 7, 1, 1); ctx.fillRect(3, 8, 1, 1);
             });
-            // 4: Wood Top
-            drawTile(4, ctx => {
+            drawTile(4, ctx => { // Wood Top
                 ctx.fillStyle = '#B89A5A'; ctx.fillRect(0, 0, 16, 16);
                 ctx.strokeStyle = '#7A5F2D'; ctx.lineWidth = 1;
                 ctx.strokeRect(2.5, 2.5, 11, 11); ctx.strokeRect(4.5, 4.5, 7, 7); ctx.strokeRect(6.5, 6.5, 3, 3);
                 px(ctx, 8, 8, '#5A4A1A');
             });
-            // 5: Wood Side
-            drawTile(5, ctx => {
+            drawTile(5, ctx => { // Wood Side
                 ctx.fillStyle = '#6E5326'; ctx.fillRect(0, 0, 16, 16);
-                ctx.fillStyle = '#574219';
-                ctx.fillRect(0, 0, 1, 16); ctx.fillRect(5, 0, 1, 16); ctx.fillRect(10, 0, 1, 16); ctx.fillRect(15, 0, 1, 16);
-                ctx.fillStyle = '#826838';
-                ctx.fillRect(3, 0, 1, 16); ctx.fillRect(8, 0, 1, 16); ctx.fillRect(13, 0, 1, 16);
+                ctx.fillStyle = '#574219'; ctx.fillRect(0, 0, 1, 16); ctx.fillRect(5, 0, 1, 16); ctx.fillRect(10, 0, 1, 16); ctx.fillRect(15, 0, 1, 16);
+                ctx.fillStyle = '#826838'; ctx.fillRect(3, 0, 1, 16); ctx.fillRect(8, 0, 1, 16); ctx.fillRect(13, 0, 1, 16);
             });
-            // 6: Leaves
-            drawTile(6, ctx => {
+            drawTile(6, ctx => { // Leaves
                 ctx.clearRect(0, 0, 16, 16);
                 for(let x=0; x<16; x++) for(let y=0; y<16; y++) {
-                    if (r() > 0.15) {
-                        let c = '#3F8A22'; let rv = r();
-                        if (rv > 0.8) c = '#4D9F2A'; else if (rv < 0.2) c = '#357718';
-                        px(ctx, x, y, c);
-                    }
+                    if (r() > 0.15) { let c = '#3F8A22'; let rv = r(); if (rv > 0.8) c = '#4D9F2A'; else if (rv < 0.2) c = '#357718'; px(ctx, x, y, c); }
                 }
             });
-            // 7: Bedrock
-            drawTile(7, ctx => {
+            drawTile(7, ctx => { // Bedrock
                 ctx.fillStyle = '#454545'; ctx.fillRect(0, 0, 16, 16);
                 for(let x=0; x<16; x++) for(let y=0; y<16; y++) {
-                    let rv = r(); let c = '#454545';
-                    if (rv > 0.75) c = '#5C5C5C'; else if (rv > 0.5) c = '#3A3A3A'; else if (rv > 0.25) c = '#2E2E2E';
-                    px(ctx, x, y, c);
+                    let rv = r(); let c = '#454545'; if (rv > 0.75) c = '#5C5C5C'; else if (rv > 0.5) c = '#3A3A3A'; else if (rv > 0.25) c = '#2E2E2E'; px(ctx, x, y, c);
                 }
             });
             
@@ -212,7 +192,52 @@
         const atlasTexture = generateTextures();
         const chunkMaterial = new THREE.MeshLambertMaterial({ map: atlasTexture, vertexColors: true, side: THREE.FrontSide, alphaTest: 0.5 });
 
-        // --- 5. CHUNK SYSTEM ---
+        // --- 5. MINECRAFT HOTBAR UI 3D RENDERER ---
+        const TILE_MAP = {
+            [GRASS]: { top: 0, bottom: 2, side: 1 }, [DIRT]: { top: 2, bottom: 2, side: 2 },
+            [STONE]: { top: 3, bottom: 3, side: 3 }, [WOOD]: { top: 4, bottom: 4, side: 5 },
+            [LEAVES]:{ top: 6, bottom: 6, side: 6 }, [BEDROCK]:{ top: 7, bottom: 7, side: 7 }
+        };
+
+        function generateHotbarIcons() {
+            const iconRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: false });
+            iconRenderer.setSize(64, 64);
+            const iconScene = new THREE.Scene();
+            const iconCamera = new THREE.OrthographicCamera(-1.2, 1.2, 1.2, -1.2, 0.1, 10);
+            iconCamera.position.set(2, 2, 2);
+            iconCamera.lookAt(0, 0, 0);
+            iconScene.add(new THREE.AmbientLight(0xffffff, 0.8));
+            const dir = new THREE.DirectionalLight(0xffffff, 0.8); dir.position.set(2, 4, 2); iconScene.add(dir);
+
+            function getMat(tile) {
+                const tex = atlasTexture.clone();
+                tex.needsUpdate = true;
+                tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+                tex.repeat.set(0.25, 0.25);
+                tex.offset.x = (tile % 4) * 0.25;
+                tex.offset.y = 1.0 - (Math.floor(tile / 4) + 1) * 0.25;
+                return new THREE.MeshLambertMaterial({ map: tex });
+            }
+
+            function renderIcon(blockType) {
+                const map = TILE_MAP[blockType];
+                const mats = [getMat(map.side), getMat(map.side), getMat(map.top), getMat(map.bottom), getMat(map.side), getMat(map.side)];
+                const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mats);
+                iconScene.add(mesh);
+                iconRenderer.render(iconScene, iconCamera);
+                const dataUrl = iconRenderer.domElement.toDataURL();
+                iconScene.remove(mesh);
+                return dataUrl;
+            }
+
+            const blockTypes = [GRASS, DIRT, STONE, WOOD, LEAVES];
+            blockTypes.forEach((type, i) => {
+                document.getElementById(`icon-${i+1}`).src = renderIcon(type);
+            });
+        }
+        generateHotbarIcons();
+
+        // --- 6. CHUNK SYSTEM ---
         const chunks = new Map();
         const chunkQueue = [];
         function getChunkKey(cx, cz) { return `${cx},${cz}`; }
@@ -224,19 +249,17 @@
                 for (let z = 0; z < CHUNK_SIZE; z++) {
                     const wx = cx * CHUNK_SIZE + x, wz = cz * CHUNK_SIZE + z;
                     const noise = fbm(wx * 0.05, wz * 0.05);
-                    const height = Math.floor(noise * 16) + 32; // Terrain between Y=32 and Y=48
+                    const height = Math.floor(noise * 16) + 32;
                     
                     for (let y = 0; y < height; y++) {
                         let block = STONE;
-                        if (y === 0) block = BEDROCK; // Deep bottom layer
-                        else if (y < 4) { if (Math.random() > y / 4.0) block = BEDROCK; } // Rough bedrock floor
+                        if (y === 0) block = BEDROCK;
+                        else if (y < 4) { if (Math.random() > y / 4.0) block = BEDROCK; }
                         else if (y === height - 1) block = GRASS;
                         else if (y > height - 4) block = DIRT;
-                        
                         data[y * CHUNK_SIZE * CHUNK_SIZE + x * CHUNK_SIZE + z] = block;
                     }
 
-                    // Trees
                     if (x > 2 && x < 14 && z > 2 && z < 14 && hash(wx, wz) < 0.02) {
                         const trunkHeight = 4 + Math.floor(hash(wx, wz) * 3);
                         for (let i = 1; i <= trunkHeight; i++) data[(height + i - 1) * CHUNK_SIZE * CHUNK_SIZE + x * CHUNK_SIZE + z] = WOOD;
@@ -278,7 +301,7 @@
             if (lz === CHUNK_SIZE - 1) { const c = getChunk(cx, cz + 1); if (c) rebuildChunkMesh(c); }
         }
 
-        // --- 6. CHUNK MESHING ---
+        // --- 7. CHUNK MESHING ---
         const FACES = [
             { dir: [ 1, 0, 0], corners: [[1,1,0],[1,1,1],[1,0,1],[1,0,0]], uv: [[1,1],[0,1],[0,0],[1,0]] },
             { dir: [-1, 0, 0], corners: [[0,1,1],[0,1,0],[0,0,0],[0,0,1]], uv: [[1,1],[0,1],[0,0],[1,0]] },
@@ -287,11 +310,6 @@
             { dir: [ 0, 0, 1], corners: [[1,1,1],[0,1,1],[0,0,1],[1,0,1]], uv: [[1,1],[0,1],[0,0],[1,0]] },
             { dir: [ 0, 0,-1], corners: [[0,1,0],[1,1,0],[1,0,0],[0,0,0]], uv: [[1,1],[0,1],[0,0],[1,0]] }
         ];
-        const TILE_MAP = {
-            [GRASS]: { top: 0, bottom: 2, side: 1 }, [DIRT]: { top: 2, bottom: 2, side: 2 },
-            [STONE]: { top: 3, bottom: 3, side: 3 }, [WOOD]: { top: 4, bottom: 4, side: 5 },
-            [LEAVES]:{ top: 6, bottom: 6, side: 6 }, [BEDROCK]:{ top: 7, bottom: 7, side: 7 }
-        };
         function getTileForFace(block, faceIndex) {
             const map = TILE_MAP[block];
             if (faceIndex === 2) return map.top;
@@ -318,8 +336,12 @@
                     const u0 = (tile % 4) * 0.25, v0 = 1.0 - Math.floor(tile / 4) * 0.25;
                     const u1 = u0 + 0.25, v1 = v0 - 0.25;
 
+                    // Exact Minecraft directional lighting shading
                     let shade = 1.0;
-                    if (f === 3) shade = 0.6; else if (f === 0 || f === 1 || f === 4 || f === 5) shade = 0.8;
+                    if (f === 2) shade = 1.0;        // Top
+                    else if (f === 3) shade = 0.5;   // Bottom
+                    else if (f === 0 || f === 1) shade = 0.6; // East/West (X)
+                    else if (f === 4 || f === 5) shade = 0.8; // North/South (Z)
 
                     for (let v = 0; v < 4; v++) {
                         const corner = face.corners[v];
@@ -344,7 +366,7 @@
         }
 
         function updateChunks() {
-            const pCx = Math.floor(camera.position.x / CHUNK_SIZE), pCz = Math.floor(camera.position.z / CHUNK_SIZE);
+            const pCx = Math.floor(player.position.x / CHUNK_SIZE), pCz = Math.floor(player.position.z / CHUNK_SIZE);
             for (const [key, chunk] of chunks) {
                 if (Math.abs(chunk.cx - pCx) > RENDER_DISTANCE + 1 || Math.abs(chunk.cz - pCz) > RENDER_DISTANCE + 1) {
                     if (chunk.mesh) { scene.remove(chunk.mesh); chunk.mesh.geometry.dispose(); }
@@ -375,32 +397,77 @@
             }
         }
 
-        // --- 7. POINTER LOCK & CONTROLS ---
+        // --- 8. MINECRAFT CHARACTER MODEL ---
+        const player = new THREE.Group();
+        player.position.set(0.5, 34, 0.5); // Position represents FEET
+        scene.add(player);
+
+        const skinMat = new THREE.MeshLambertMaterial({ color: 0xECB382 });
+        const shirtMat = new THREE.MeshLambertMaterial({ color: 0x00AAAA });
+        const pantsMat = new THREE.MeshLambertMaterial({ color: 0x5555CC });
+        const shoeMat = new THREE.MeshLambertMaterial({ color: 0x3B3B3B });
+        const hairMat = new THREE.MeshLambertMaterial({ color: 0x4A2F17 });
+
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skinMat);
+        head.position.y = 1.75;
+        const hair = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.18, 0.52), hairMat);
+        hair.position.set(0, 1.93, -0.02);
+        const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.75, 0.25), shirtMat);
+        body.position.y = 1.125;
+        const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), shirtMat);
+        leftArm.position.set(-0.375, 1.125, 0);
+        const rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), shirtMat);
+        rightArm.position.set(0.375, 1.125, 0);
+        const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), pantsMat);
+        leftLeg.position.set(-0.125, 0.375, 0);
+        const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), pantsMat);
+        rightLeg.position.set(0.125, 0.375, 0);
+        const leftShoe = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.15, 0.27), shoeMat);
+        leftShoe.position.set(-0.125, 0.075, 0.02);
+        const rightShoe = new THREE.Mesh(new THREE.BoxGeometry(0.27, 0.15, 0.27), shoeMat);
+        rightShoe.position.set(0.125, 0.075, 0.02);
+
+        const playerModel = new THREE.Group();
+        playerModel.add(head, hair, body, leftArm, rightArm, leftLeg, rightLeg, leftShoe, rightShoe);
+        player.add(playerModel);
+
+        // --- 9. CONTROLS & POINTER LOCK ---
         let isPlaying = false;
         let yaw = 0, pitch = 0;
+        let viewMode = 0; // 0 = 1st Person, 1 = 3rd Back, 2 = 3rd Front
         const overlay = document.getElementById('overlay');
         const crosshair = document.getElementById('crosshair');
         
-        function startGame() { if (document.pointerLockElement !== renderer.domElement) renderer.domElement.requestPointerLock(); }
-        function pauseGame() { if (document.pointerLockElement === renderer.domElement) document.exitPointerLock(); }
-        function togglePlay() { if (document.pointerLockElement === renderer.domElement) pauseGame(); else startGame(); }
+        function startGame() {
+            isPlaying = true;
+            overlay.style.display = 'none';
+            crosshair.style.display = 'block';
+            document.body.style.cursor = 'none';
+            try { renderer.domElement.requestPointerLock(); } catch (err) {}
+        }
 
-        document.addEventListener('keydown', (e) => { if (e.code === 'F2') { e.preventDefault(); togglePlay(); } });
-        overlay.addEventListener('click', startGame);
+        function pauseGame() {
+            isPlaying = false;
+            overlay.style.display = 'flex';
+            crosshair.style.display = 'none';
+            document.body.style.cursor = 'default';
+            try { if (document.exitPointerLock) document.exitPointerLock(); } catch (err) {}
+        }
 
-        // This is the fix: The game state is strictly tied to the actual pointer lock state.
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'F2') { e.preventDefault(); if (isPlaying) pauseGame(); else startGame(); }
+            if (e.code === 'F5') { e.preventDefault(); viewMode = (viewMode + 1) % 3; }
+        });
+        overlay.addEventListener('click', () => { if (!isPlaying) startGame(); });
+
         document.addEventListener('pointerlockchange', () => {
-            isPlaying = (document.pointerLockElement === renderer.domElement);
-            overlay.style.display = isPlaying ? 'none' : 'flex';
-            crosshair.style.display = isPlaying ? 'block' : 'none';
-            document.body.style.cursor = isPlaying ? 'none' : 'default';
+            if (document.pointerLockElement !== renderer.domElement && isPlaying) pauseGame();
         });
 
         document.addEventListener('mousemove', (e) => {
             if (isPlaying) {
                 yaw -= e.movementX * 0.002; pitch -= e.movementY * 0.002;
                 pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
-                camera.rotation.y = yaw; camera.rotation.x = pitch;
             }
         });
 
@@ -443,7 +510,7 @@
             document.getElementById('hud').innerText = `Selected: ${blockNames[index]}`;
         }
 
-        // --- 8. BLOCK INTERACTION ---
+        // --- 10. BLOCK INTERACTION ---
         const raycaster = new THREE.Raycaster();
         raycaster.far = 6;
         document.addEventListener('mousedown', (e) => {
@@ -460,31 +527,59 @@
                 const placePos = hit.point.clone().add(normal.clone().multiplyScalar(0.5)).floor();
                 
                 if (e.button === 0) {
-                    // Prevent breaking Bedrock
                     if (getWorldBlock(breakPos.x, breakPos.y, breakPos.z) !== BEDROCK) {
                         setWorldBlock(breakPos.x, breakPos.y, breakPos.z, AIR);
                     }
                 } else if (e.button === 2) {
-                    if (placePos.distanceTo(camera.position) > 2.0) setWorldBlock(placePos.x, placePos.y, placePos.z, blockTypes[selectedBlockIndex]);
+                    // STRICT MINECRAFT PLACEMENT CHECK
+                    const p_minX = player.position.x - 0.3, p_maxX = player.position.x + 0.3;
+                    const p_minY = player.position.y, p_maxY = player.position.y + 1.8;
+                    const p_minZ = player.position.z - 0.3, p_maxZ = player.position.z + 0.3;
+                    
+                    const b_minX = placePos.x, b_maxX = placePos.x + 1;
+                    const b_minY = placePos.y, b_maxY = placePos.y + 1;
+                    const b_minZ = placePos.z, b_maxZ = placePos.z + 1;
+
+                    const intersectsPlayer = (p_minX < b_maxX && p_maxX > b_minX &&
+                                              p_minY < b_maxY && p_maxY > b_minY &&
+                                              p_minZ < b_maxZ && p_maxZ > b_minZ);
+
+                    if (!intersectsPlayer) {
+                        setWorldBlock(placePos.x, placePos.y, placePos.z, blockTypes[selectedBlockIndex]);
+                    }
                 }
             }
         });
         document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // --- 9. PHYSICS ---
+        // --- 11. EXACT MINECRAFT PHYSICS & COLLISION ---
         function checkCollision(x, y, z) {
-            const pw = 0.3, ph = 1.8;
-            const minX = Math.floor(x - pw), maxX = Math.floor(x + pw);
-            const minY = Math.floor(y - ph - 0.01), maxY = Math.floor(y + 0.01);
-            const minZ = Math.floor(z - pw), maxZ = Math.floor(z + pw);
-            for (let bx = minX; bx <= maxX; bx++) for (let by = minY; by <= maxY; by++) for (let bz = minZ; bz <= maxZ; bz++) {
-                const block = getWorldBlock(bx, by, bz);
-                if (block !== AIR && block !== LEAVES) return true;
+            const radius = 0.3;
+            const totalHeight = 1.8;
+            
+            const p_minX = x - radius, p_maxX = x + radius;
+            const p_minY = y, p_maxY = y + totalHeight;
+            const p_minZ = z - radius, p_maxZ = z + radius;
+            
+            const minX = Math.floor(p_minX);
+            const maxX = Math.floor(p_maxX - 0.0001);
+            const minY = Math.floor(p_minY);
+            const maxY = Math.floor(p_maxY - 0.0001);
+            const minZ = Math.floor(p_minZ);
+            const maxZ = Math.floor(p_maxZ - 0.0001);
+            
+            for (let bx = minX; bx <= maxX; bx++) {
+                for (let by = minY; by <= maxY; by++) {
+                    for (let bz = minZ; bz <= maxZ; bz++) {
+                        const block = getWorldBlock(bx, by, bz);
+                        if (block !== AIR && block !== LEAVES) return true;
+                    }
+                }
             }
             return false;
         }
 
-        // --- 10. ANIMATION LOOP ---
+        // --- 12. ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
             processChunkQueue(); updateChunks();
@@ -505,14 +600,52 @@
                 if (len > 0) { mX = (mX / len) * speed; mZ = (mZ / len) * speed; }
                 if (move.jump && onGround) { velocity.y = 0.25; onGround = false; }
 
-                let newX = camera.position.x + mX;
-                if (!checkCollision(newX, camera.position.y, camera.position.z)) camera.position.x = newX;
-                let newZ = camera.position.z + mZ;
-                if (!checkCollision(camera.position.x, camera.position.y, newZ)) camera.position.z = newZ;
-                let newY = camera.position.y + velocity.y;
-                if (!checkCollision(camera.position.x, newY, camera.position.z)) { camera.position.y = newY; onGround = false; }
-                else { if (velocity.y < 0) onGround = true; velocity.y = 0; }
+                // Independent Axis Sweeping
+                let newX = player.position.x + mX;
+                if (!checkCollision(newX, player.position.y, player.position.z)) player.position.x = newX;
+                
+                let newZ = player.position.z + mZ;
+                if (!checkCollision(player.position.x, player.position.y, newZ)) player.position.z = newZ;
+                
+                let newY = player.position.y + velocity.y;
+                if (!checkCollision(player.position.x, newY, player.position.z)) { 
+                    player.position.y = newY; onGround = false; 
+                } else { 
+                    if (velocity.y < 0) onGround = true; 
+                    velocity.y = 0; 
+                }
             }
+
+            // Update Player Model Rotation
+            player.rotation.y = yaw;
+
+            // Update Camera View
+            const eyeHeight = 1.62;
+            if (viewMode === 0) { // 1st Person
+                camera.position.set(player.position.x, player.position.y + eyeHeight, player.position.z);
+                camera.rotation.y = yaw;
+                camera.rotation.x = pitch;
+                playerModel.visible = false; // Hide body so it doesn't clip camera
+            } else if (viewMode === 1) { // 3rd Person Back
+                const dist = 3.0;
+                const camX = player.position.x - Math.sin(yaw) * Math.cos(pitch) * dist;
+                const camY = player.position.y + eyeHeight + Math.sin(pitch) * dist;
+                const camZ = player.position.z - Math.cos(yaw) * Math.cos(pitch) * dist;
+                camera.position.set(camX, camY, camZ);
+                camera.rotation.y = yaw;
+                camera.rotation.x = pitch;
+                playerModel.visible = true;
+            } else if (viewMode === 2) { // 3rd Person Front
+                const dist = 3.0;
+                const camX = player.position.x + Math.sin(yaw) * Math.cos(pitch) * dist;
+                const camY = player.position.y + eyeHeight + Math.sin(pitch) * dist;
+                const camZ = player.position.z + Math.cos(yaw) * Math.cos(pitch) * dist;
+                camera.position.set(camX, camY, camZ);
+                camera.rotation.y = yaw + Math.PI;
+                camera.rotation.x = pitch;
+                playerModel.visible = true;
+            }
+
             renderer.render(scene, camera);
         }
 
@@ -524,7 +657,7 @@
 
         // Initial Spawn
         const spawnNoise = fbm(0 * 0.05, 0 * 0.05);
-        camera.position.set(0.5, Math.floor(spawnNoise * 16) + 34, 0.5);
+        player.position.set(0.5, Math.floor(spawnNoise * 16) + 33, 0.5); // 33 = 32 top block + 1 to stand on it
         updateChunks();
         while(chunkQueue.length > 0) {
             const { cx, cz } = chunkQueue.shift();
