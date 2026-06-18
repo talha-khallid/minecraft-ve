@@ -697,6 +697,7 @@
             if (!isPlaying) return;
             if (e.code === 'F2') { e.preventDefault(); pauseGame(); }
             if (e.code === 'Space') {
+                if (e.repeat) return; // Prevent holding space from toggling fly rapidly
                 const now = Date.now();
                 if (now - lastSpaceTap < 300) { // 300ms window for double tap
                     isFlying = !isFlying;
@@ -860,9 +861,6 @@
                 let speed = 0.15;
                 if (isFlying) {
                     speed = move.sprint ? 0.5 : 0.25; // Sprint fly is very fast
-                    velocity.y = 0;
-                    if (move.jump) velocity.y = speed; // Up
-                    if (move.down) velocity.y = -speed; // Down
                 } else {
                     if (isInWater) {
                         velocity.y -= 0.004; 
@@ -880,18 +878,38 @@
                 const fX = -Math.sin(yaw), fZ = -Math.cos(yaw);
                 const rX = Math.cos(yaw), rZ = -Math.sin(yaw);
                 let inputX = 0, inputZ = 0;
-                if (move.forward) { inputX += fX; inputZ += fZ; }
-                if (move.backward) { inputX -= fX; inputZ -= fZ; }
-                if (move.right) { inputX += rX; inputZ += rZ; }
-                if (move.left) { inputX -= rX; inputZ -= rZ; }
-
-                const len = Math.hypot(inputX, inputZ);
-                if (len > 0) { inputX = (inputX / len) * speed; inputZ = (inputZ / len) * speed; }
 
                 if (isFlying) {
-                    velocity.x = inputX; // Instant accel for flying
-                    velocity.z = inputZ;
+                    let fY = Math.sin(pitch);
+                    let fScale = Math.cos(pitch);
+                    let fX3 = fX * fScale, fZ3 = fZ * fScale;
+                    let inputY = 0;
+                    
+                    if (move.forward) { inputX += fX3; inputY += fY; inputZ += fZ3; }
+                    if (move.backward) { inputX -= fX3; inputY -= fY; inputZ -= fZ3; }
+                    if (move.right) { inputX += rX; inputZ += rZ; }
+                    if (move.left) { inputX -= rX; inputZ -= rZ; }
+                    
+                    if (move.jump) inputY += 1;
+                    if (move.down) inputY -= 1;
+                    
+                    const len = Math.hypot(Math.hypot(inputX, inputZ), inputY);
+                    if (len > 0) {
+                        velocity.x = (inputX / len) * speed;
+                        velocity.y = (inputY / len) * speed;
+                        velocity.z = (inputZ / len) * speed;
+                    } else {
+                        velocity.x = 0; velocity.y = 0; velocity.z = 0;
+                    }
                 } else {
+                    if (move.forward) { inputX += fX; inputZ += fZ; }
+                    if (move.backward) { inputX -= fX; inputZ -= fZ; }
+                    if (move.right) { inputX += rX; inputZ += rZ; }
+                    if (move.left) { inputX -= rX; inputZ -= rZ; }
+
+                    const len = Math.hypot(inputX, inputZ);
+                    if (len > 0) { inputX = (inputX / len) * speed; inputZ = (inputZ / len) * speed; }
+
                     const accel = onGround ? 0.4 : 0.1;
                     const decel = onGround ? 0.6 : 0.0;
                     if (len > 0) {
