@@ -549,23 +549,35 @@
             chunkQueue.length = 0;
             for (let x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; x++) for (let z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; z++) {
                 const cx = pCx + x, cz = pCz + z;
-                if (!chunks.has(getChunkKey(cx, cz))) chunkQueue.push({ cx, cz, dist: x*x + z*z });
+                const key = getChunkKey(cx, cz);
+                if (!chunks.has(key) && !pendingChunks.has(key)) {
+                    chunkQueue.push({ cx, cz, dist: x*x + z*z });
+                }
             }
             chunkQueue.sort((a, b) => a.dist - b.dist);
         }
 
-        let chunkQueueTimer = 0;
+        const pendingChunks = new Set();
+        const meshTasks = [];
+        let terrainWorker = null;
+
         function processChunkQueue() {
-            chunkQueueTimer++;
-            if (chunkQueueTimer % 3 === 0 && chunkQueue.length > 0) {
+            if (chunkQueue.length > 0 && pendingChunks.size < 4 && terrainWorker) {
                 const { cx, cz } = chunkQueue.shift();
-                if (!chunks.has(getChunkKey(cx, cz))) {
-                    const chunk = { cx, cz, data: generateChunkData(cx, cz), mesh: null, waterMesh: null };
-                    chunks.set(getChunkKey(cx, cz), chunk); rebuildChunkMesh(chunk);
-                    if (getChunk(cx - 1, cz)) rebuildChunkMesh(getChunk(cx - 1, cz));
-                    if (getChunk(cx + 1, cz)) rebuildChunkMesh(getChunk(cx + 1, cz));
-                    if (getChunk(cx, cz - 1)) rebuildChunkMesh(getChunk(cx, cz - 1));
-                    if (getChunk(cx, cz + 1)) rebuildChunkMesh(getChunk(cx, cz + 1));
+                const key = getChunkKey(cx, cz);
+                if (!chunks.has(key) && !pendingChunks.has(key)) {
+                    pendingChunks.add(key);
+                    terrainWorker.postMessage({ cx, cz, seed: SEED });
+                }
+            }
+            if (meshTasks.length > 0) {
+                const start = performance.now();
+                while (meshTasks.length > 0 && performance.now() - start < 5) {
+                    const chunk = meshTasks.shift();
+                    if (!chunk) continue;
+                    if (chunks.has(getChunkKey(chunk.cx, chunk.cz))) {
+                        rebuildChunkMesh(chunk);
+                    }
                 }
             }
         }
@@ -968,12 +980,60 @@
         if (spawnY === 0) spawnY = SEA_LEVEL + 5;
         
         camera.position.set(spawnX + 0.5, spawnY + 1.62, spawnZ + 0.5);
-        updateChunks();
-        while(chunkQueue.length > 0) {
-            const { cx, cz } = chunkQueue.shift();
+        
+        // --- INITIALIZE WEB WORKER ---
+        const workerCode = `
+        const CHUNK_SIZE = ${CHUNK_SIZE};
+        const WORLD_HEIGHT = ${WORLD_HEIGHT};
+        const SEA_LEVEL = ${SEA_LEVEL};
+        const AIR = ${AIR}, GRASS = ${GRASS}, DIRT = ${DIRT}, STONE = ${STONE}, WOOD = ${WOOD}, LEAVES = ${LEAVES}, BEDROCK = ${BEDROCK}, WATER = ${WATER}, SAND = ${SAND}, SNOW = ${SNOW}, FLOWING_WATER = ${FLOWING_WATER};
+        let SEED = 0;
+        
+        ${hash.toString()}
+        ${smoothNoise.toString()}
+        ${fbm.toString()}
+        ${hash3D.toString()}
+        ${smoothNoise3D.toString()}
+        ${getTerrainHeight.toString()}
+        ${generateChunkData.toString()}
+
+        self.onmessage = function(e) {
+            const { cx, cz, seed } = e.data;
+            SEED = seed;
+            const data = generateChunkData(cx, cz);
+            self.postMessage({ cx, cz, data }, [data.buffer]);
+        };
+        `;
+        terrainWorker = new Worker(URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' })));
+        
+        terrainWorker.onmessage = function(e) {
+            const { cx, cz, data } = e.data;
+            const key = getChunkKey(cx, cz);
+            pendingChunks.delete(key);
+            
+            const pCx = Math.floor(camera.position.x / CHUNK_SIZE), pCz = Math.floor(camera.position.z / CHUNK_SIZE);
+            if (Math.abs(cx - pCx) > RENDER_DISTANCE + 1 || Math.abs(cz - pCz) > RENDER_DISTANCE + 1) return;
+
+            const chunk = { cx, cz, data, mesh: null, waterMesh: null };
+            chunks.set(key, chunk);
+            
+            meshTasks.push(chunk);
+            const c1 = getChunk(cx - 1, cz); if (c1) meshTasks.push(c1);
+            const c2 = getChunk(cx + 1, cz); if (c2) meshTasks.push(c2);
+            const c3 = getChunk(cx, cz - 1); if (c3) meshTasks.push(c3);
+            const c4 = getChunk(cx, cz + 1); if (c4) meshTasks.push(c4);
+        };
+
+        // Initialize world near spawn synchronously to avoid falling
+        const initCx = Math.floor(camera.position.x / CHUNK_SIZE), initCz = Math.floor(camera.position.z / CHUNK_SIZE);
+        for (let x = -1; x <= 1; x++) for (let z = -1; z <= 1; z++) {
+            const cx = initCx + x, cz = initCz + z;
             const chunk = { cx, cz, data: generateChunkData(cx, cz), mesh: null, waterMesh: null };
-            chunks.set(getChunkKey(cx, cz), chunk); rebuildChunkMesh(chunk);
+            chunks.set(getChunkKey(cx, cz), chunk); 
+            rebuildChunkMesh(chunk);
         }
+
+        updateChunks(); // Will queue the rest asynchronously
         animate();
     </script>
 </body>
