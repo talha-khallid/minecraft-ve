@@ -8,6 +8,13 @@
         body { margin: 0; overflow: hidden; font-family: 'Courier New', monospace; background: #78A7FF; cursor: default; }
         canvas { display: block; }
         
+        #fps {
+            position: absolute; top: 10px; left: 10px;
+            background: rgba(0,0,0,0.5); color: #55FF55; 
+            padding: 5px 10px; font-size: 16px; z-index: 10;
+            border-radius: 4px;
+        }
+
         #crosshair {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             width: 24px; height: 24px; pointer-events: none; z-index: 10; display: none;
@@ -49,13 +56,15 @@
 </head>
 <body>
 
+    <div id="fps">FPS: 0</div>
+
     <div id="overlay">
         <h1>VOXELCRAFT</h1>
         <p>Press <span class="key">F2</span> or Click to Play</p>
         <p style="font-size: 0.9em; opacity: 0.7; margin-top: 20px;">
             <span class="key">WASD</span> Move | <span class="key">Space</span> Jump | <span class="key">Mouse</span> Look<br>
             <span class="key">L-Click</span> Break | <span class="key">R-Click</span> Place<br>
-            <span class="key">1-5</span> or <span class="key">Scroll</span> Select Block | <span class="key">F5</span> View | <span class="key">F2</span> Pause
+            <span class="key">1-5</span> or <span class="key">Scroll</span> Select Block | <span class="key">F2</span> Pause
         </p>
     </div>
 
@@ -116,7 +125,6 @@
         const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
-        scene.add(camera);
 
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
         scene.add(ambientLight);
@@ -299,13 +307,14 @@
             geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
             geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
             geometry.setIndex(indices);
+            geometry.computeBoundingSphere(); // OPTIMIZATION: Helps GPU cull hidden chunks
             const mesh = new THREE.Mesh(geometry, chunkMaterial);
             mesh.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
             scene.add(mesh); chunk.mesh = mesh;
         }
 
         function updateChunks() {
-            const pCx = Math.floor(player.position.x / CHUNK_SIZE), pCz = Math.floor(player.position.z / CHUNK_SIZE);
+            const pCx = Math.floor(camera.position.x / CHUNK_SIZE), pCz = Math.floor(camera.position.z / CHUNK_SIZE);
             for (const [key, chunk] of chunks) {
                 if (Math.abs(chunk.cx - pCx) > RENDER_DISTANCE + 1 || Math.abs(chunk.cz - pCz) > RENDER_DISTANCE + 1) {
                     if (chunk.mesh) { scene.remove(chunk.mesh); chunk.mesh.geometry.dispose(); }
@@ -336,98 +345,9 @@
             }
         }
 
-        // --- 8. EXACT MINECRAFT CHARACTER MODEL ---
-        function createPlayerTexture(drawFn) {
-            const canvas = document.createElement('canvas'); canvas.width = 16; canvas.height = 16;
-            const ctx = canvas.getContext('2d'); drawFn(ctx);
-            const tex = new THREE.CanvasTexture(canvas); tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter; return tex;
-        }
-        function drawNoise(ctx, color, noiseColor) {
-            ctx.fillStyle = color; ctx.fillRect(0, 0, 16, 16); ctx.fillStyle = noiseColor;
-            for(let i=0; i<20; i++) ctx.fillRect(Math.floor(Math.random()*16), Math.floor(Math.random()*16), 1, 1);
-        }
-
-        const skinColor = '#E0B483', skinNoise = '#D3A276';
-        const shirtColor = '#12918B', shirtNoise = '#107C77';
-        const pantsColor = '#4854A4', pantsNoise = '#3C468A';
-        const shoeColor = '#3A3533', shoeNoise = '#2F2B29';
-        const hairColor = '#2B2522', hairNoise = '#221D1B';
-
-        const texSkin = createPlayerTexture(ctx => drawNoise(ctx, skinColor, skinNoise));
-        const texShirt = createPlayerTexture(ctx => drawNoise(ctx, shirtColor, shirtNoise));
-        const texPants = createPlayerTexture(ctx => drawNoise(ctx, pantsColor, pantsNoise));
-        const texShoe = createPlayerTexture(ctx => drawNoise(ctx, shoeColor, shoeNoise));
-        const texHair = createPlayerTexture(ctx => drawNoise(ctx, hairColor, hairNoise));
-        const texFaceFront = createPlayerTexture(ctx => {
-            ctx.fillStyle = skinColor; ctx.fillRect(0, 0, 16, 16);
-            ctx.fillStyle = hairColor; ctx.fillRect(0, 0, 16, 4);
-            for(let x=0; x<16; x++) { if(Math.random() > 0.5) ctx.fillRect(x, 4, 1, 1); }
-            ctx.fillStyle = '#FFFFFF'; ctx.fillRect(3, 6, 2, 2); ctx.fillRect(11, 6, 2, 2);
-            ctx.fillStyle = '#8C5A2B'; ctx.fillRect(4, 7, 1, 1); ctx.fillRect(12, 7, 1, 1);
-            ctx.fillStyle = skinNoise; ctx.fillRect(7, 9, 2, 1); 
-            ctx.fillStyle = '#9E7355'; ctx.fillRect(4, 11, 8, 1);
-        });
-
-        const player = new THREE.Group();
-        player.position.set(0.5, 34, 0.5); scene.add(player);
-        function getMaterial(texture) { return new THREE.MeshLambertMaterial({ map: texture }); }
-
-        const headPivot = new THREE.Group(); headPivot.position.y = 1.5; player.add(headPivot);
-        const headMats = [getMaterial(texSkin), getMaterial(texSkin), getMaterial(texHair), getMaterial(texSkin), getMaterial(texFaceFront), getMaterial(texHair)];
-        const headMesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMats); headMesh.position.y = 0.25; headPivot.add(headMesh);
-
-        const bodyPivot = new THREE.Group(); bodyPivot.position.y = 1.5; player.add(bodyPivot);
-        const bodyMesh = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.75, 0.25), getMaterial(texShirt)); bodyMesh.position.y = -0.375; bodyPivot.add(bodyMesh);
-
-        function buildArm() {
-            const pivot = new THREE.Group(); pivot.position.y = 1.5; 
-            const armMats = [getMaterial(texShirt), getMaterial(texShirt), getMaterial(texShirt), getMaterial(texShirt), getMaterial(texShirt), getMaterial(texShirt)];
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), armMats); mesh.position.y = -0.375; pivot.add(mesh);
-            return pivot;
-        }
-        const leftArmPivot = buildArm(); leftArmPivot.position.x = 0.3125; player.add(leftArmPivot);
-        const rightArmPivot = buildArm(); rightArmPivot.position.x = -0.3125; player.add(rightArmPivot);
-
-        function buildLeg() {
-            const pivot = new THREE.Group(); pivot.position.y = 0.75;
-            const legMats = [getMaterial(texPants), getMaterial(texPants), getMaterial(texPants), getMaterial(texShoe), getMaterial(texPants), getMaterial(texPants)];
-            const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), legMats); mesh.position.y = -0.375; pivot.add(mesh);
-            return pivot;
-        }
-        const leftLegPivot = buildLeg(); leftLegPivot.position.x = 0.125; player.add(leftLegPivot);
-        const rightLegPivot = buildLeg(); rightLegPivot.position.x = -0.125; player.add(rightLegPivot);
-
-        const playerModel = new THREE.Group();
-        playerModel.add(headPivot, bodyPivot, leftArmPivot, rightArmPivot, leftLegPivot, rightLegPivot);
-        player.add(playerModel);
-
-        // 1st Person Viewmodel Arm (Matches real Minecraft proportions)
-        const fpArmHolder = new THREE.Group();
-        // Pushed further right, lower, and slightly further back
-        fpArmHolder.position.set(0.65, -0.6, -0.8); 
-        fpArmHolder.rotation.y = -Math.PI / 6;
-
-        const fpArmPivot = new THREE.Group();
-        fpArmPivot.position.set(0, -0.2, 0.1); 
-        fpArmHolder.add(fpArmPivot);
-        
-        // Scaled the geometry down to look like the screenshot
-        const fpArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), getMaterial(texSkin));
-        fpArmMesh.position.set(0, 0.3, -0.1); 
-        fpArmPivot.add(fpArmMesh);
-        camera.add(fpArmHolder);
-
-        // Block Highlight Box
-        const highlightGeometry = new THREE.BoxGeometry(1.002, 1.002, 1.002);
-        const highlightEdges = new THREE.EdgesGeometry(highlightGeometry);
-        const highlightBox = new THREE.LineSegments(highlightEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
-        highlightBox.visible = false;
-        scene.add(highlightBox);
-
-        // --- 9. CONTROLS & POINTER LOCK ---
+        // --- 8. CONTROLS & POINTER LOCK ---
         let isPlaying = false;
         let yaw = 0, pitch = 0;
-        let viewMode = 0; // 0 = 1st Person, 1 = 3rd Back, 2 = 3rd Front
         const overlay = document.getElementById('overlay');
         const crosshair = document.getElementById('crosshair');
         
@@ -441,7 +361,6 @@
         }
         window.addEventListener('keydown', (e) => {
             if (e.code === 'F2') { e.preventDefault(); if (isPlaying) pauseGame(); else startGame(); }
-            if (e.code === 'F5') { e.preventDefault(); viewMode = (viewMode + 1) % 3; }
         });
         overlay.addEventListener('click', () => { if (!isPlaying) startGame(); });
         document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement !== renderer.domElement && isPlaying) pauseGame(); });
@@ -455,9 +374,6 @@
         const move = { forward: false, backward: false, left: false, right: false, jump: false };
         const velocity = new THREE.Vector3();
         let onGround = false;
-        let swingTime = 0; let walkAnimTime = 0;
-
-        // Lerp function for smooth momentum
         function lerp(a, b, t) { return a + (b - a) * t; }
         
         document.addEventListener('keydown', (e) => {
@@ -494,38 +410,56 @@
             document.getElementById('hud').innerText = `Selected: ${blockNames[index]}`;
         }
 
+        // --- 9. CUSTOM VOXEL RAYCASTER (Instant, no lag) ---
+        function raycastVoxel() {
+            const origin = camera.position.clone();
+            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+            const step = 0.05;
+            let prevBx = Math.floor(origin.x), prevBy = Math.floor(origin.y), prevBz = Math.floor(origin.z);
+            
+            for (let t = 0; t < 6; t += step) {
+                const p = origin.clone().add(dir.clone().multiplyScalar(t));
+                const bx = Math.floor(p.x), by = Math.floor(p.y), bz = Math.floor(p.z);
+                
+                if (bx !== prevBx || by !== prevBy || bz !== prevBz) {
+                    const block = getWorldBlock(bx, by, bz);
+                    if (block !== AIR) {
+                        return { x: bx, y: by, z: bz, nx: bx - prevBx, ny: by - prevBy, nz: bz - prevBz };
+                    }
+                    prevBx = bx; prevBy = by; prevBz = bz;
+                }
+            }
+            return null;
+        }
+
+        // Block Highlight Box
+        const highlightGeometry = new THREE.BoxGeometry(1.002, 1.002, 1.002);
+        const highlightEdges = new THREE.EdgesGeometry(highlightGeometry);
+        const highlightBox = new THREE.LineSegments(highlightEdges, new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 }));
+        highlightBox.visible = false;
+        scene.add(highlightBox);
+
         // --- 10. BLOCK INTERACTION ---
-        const raycaster = new THREE.Raycaster();
-        raycaster.far = 6;
         document.addEventListener('mousedown', (e) => {
             if (!isPlaying) return;
-            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-            const meshes = [];
-            for (const chunk of chunks.values()) if (chunk.mesh) meshes.push(chunk.mesh);
-            const intersects = raycaster.intersectObjects(meshes);
-
-            if (intersects.length > 0) {
-                const hit = intersects[0];
-                const normal = hit.face.normal;
-                const breakPos = hit.point.clone().sub(normal.clone().multiplyScalar(0.5)).floor();
-                const placePos = hit.point.clone().add(normal.clone().multiplyScalar(0.5)).floor();
-                
-                if (e.button === 0) {
-                    if (getWorldBlock(breakPos.x, breakPos.y, breakPos.z) !== BEDROCK) {
-                        setWorldBlock(breakPos.x, breakPos.y, breakPos.z, AIR);
-                        swingTime = 0.01;
+            const hit = raycastVoxel();
+            if (hit) {
+                if (e.button === 0) { // Break
+                    if (getWorldBlock(hit.x, hit.y, hit.z) !== BEDROCK) {
+                        setWorldBlock(hit.x, hit.y, hit.z, AIR);
                     }
-                } else if (e.button === 2) {
-                    const p_minX = player.position.x - 0.3, p_maxX = player.position.x + 0.3;
-                    const p_minY = player.position.y, p_maxY = player.position.y + 1.8;
-                    const p_minZ = player.position.z - 0.3, p_maxZ = player.position.z + 0.3;
+                } else if (e.button === 2) { // Place
+                    const placePos = { x: hit.x + hit.nx, y: hit.y + hit.ny, z: hit.z + hit.nz };
+                    // STRICT MINECRAFT PLACEMENT CHECK (Don't place in own feet)
+                    const p_minX = camera.position.x - 0.3, p_maxX = camera.position.x + 0.3;
+                    const p_minY = camera.position.y - 1.62, p_maxY = camera.position.y - 1.62 + 1.8;
+                    const p_minZ = camera.position.z - 0.3, p_maxZ = camera.position.z + 0.3;
                     const b_minX = placePos.x, b_maxX = placePos.x + 1;
                     const b_minY = placePos.y, b_maxY = placePos.y + 1;
                     const b_minZ = placePos.z, b_maxZ = placePos.z + 1;
                     const intersectsPlayer = (p_minX < b_maxX && p_maxX > b_minX && p_minY < b_maxY && p_maxY > b_minY && p_minZ < b_maxZ && p_maxZ > b_minZ);
                     if (!intersectsPlayer) {
                         setWorldBlock(placePos.x, placePos.y, placePos.z, blockTypes[selectedBlockIndex]);
-                        swingTime = 0.01;
                     }
                 }
             }
@@ -535,8 +469,9 @@
         // --- 11. EXACT MINECRAFT PHYSICS ---
         function checkCollision(x, y, z) {
             const radius = 0.3; const totalHeight = 1.8;
+            const feetY = y - 1.62;
             const p_minX = x - radius, p_maxX = x + radius;
-            const p_minY = y, p_maxY = y + totalHeight;
+            const p_minY = feetY, p_maxY = feetY + totalHeight;
             const p_minZ = z - radius, p_maxZ = z + radius;
             const minX = Math.floor(p_minX); const maxX = Math.floor(p_maxX - 0.0001);
             const minY = Math.floor(p_minY); const maxY = Math.floor(p_maxY - 0.0001);
@@ -549,15 +484,30 @@
         }
 
         // --- 12. ANIMATION & GAME LOOP ---
+        let lastTime = performance.now();
+        let frames = 0;
+        let fps = 0;
+        const fpsDiv = document.getElementById('fps');
+
         function animate() {
             requestAnimationFrame(animate);
             processChunkQueue(); updateChunks();
+
+            // FPS Counter Logic
+            frames++;
+            const now = performance.now();
+            if (now - lastTime >= 1000) {
+                fps = frames;
+                frames = 0;
+                lastTime = now;
+                fpsDiv.innerText = `FPS: ${fps}`;
+            }
 
             if (isPlaying) {
                 // Gravity
                 velocity.y -= 0.015; if (velocity.y < -0.5) velocity.y = -0.5;
 
-                // Calculate Input Target
+                // Input Target
                 const speed = 0.15;
                 const fX = -Math.sin(yaw), fZ = -Math.cos(yaw);
                 const rX = Math.cos(yaw), rZ = -Math.sin(yaw);
@@ -570,10 +520,9 @@
                 const len = Math.hypot(inputX, inputZ);
                 if (len > 0) { inputX = (inputX / len) * speed; inputZ = (inputZ / len) * speed; }
 
-                // MC Momentum: Fast accel/decel on ground, slight air control
+                // Momentum
                 const accel = onGround ? 0.4 : 0.1;
                 const decel = onGround ? 0.6 : 0.0;
-                
                 if (len > 0) {
                     velocity.x = lerp(velocity.x, inputX, accel);
                     velocity.z = lerp(velocity.z, inputZ, accel);
@@ -584,127 +533,33 @@
 
                 if (move.jump && onGround) { velocity.y = 0.25; onGround = false; }
 
-                // Independent Axis Sweeping
-                let newX = player.position.x + velocity.x;
-                if (!checkCollision(newX, player.position.y, player.position.z)) player.position.x = newX;
+                // Axis Sweeping (camera.position is the eye)
+                let newX = camera.position.x + velocity.x;
+                if (!checkCollision(newX, camera.position.y, camera.position.z)) camera.position.x = newX;
                 else velocity.x = 0;
                 
-                let newZ = player.position.z + velocity.z;
-                if (!checkCollision(player.position.x, player.position.y, newZ)) player.position.z = newZ;
+                let newZ = camera.position.z + velocity.z;
+                if (!checkCollision(camera.position.x, camera.position.y, newZ)) camera.position.z = newZ;
                 else velocity.z = 0;
                 
-                let newY = player.position.y + velocity.y;
-                if (!checkCollision(player.position.x, newY, player.position.z)) { player.position.y = newY; onGround = false; }
+                let newY = camera.position.y + velocity.y;
+                if (!checkCollision(camera.position.x, newY, camera.position.z)) { camera.position.y = newY; onGround = false; }
                 else { if (velocity.y < 0) onGround = true; velocity.y = 0; }
+                
+                camera.rotation.y = yaw; camera.rotation.x = pitch;
             }
 
-            // --- RAYCAST HIGHLIGHT BOX ---
-            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-            const meshes = [];
-            for (const chunk of chunks.values()) if (chunk.mesh) meshes.push(chunk.mesh);
-            const intersects = raycaster.intersectObjects(meshes);
-            if (intersects.length > 0 && isPlaying) {
-                const breakPos = intersects[0].point.clone().sub(intersects[0].face.normal.clone().multiplyScalar(0.5)).floor();
-                highlightBox.position.set(breakPos.x + 0.5, breakPos.y + 0.5, breakPos.z + 0.5);
-                highlightBox.visible = true;
+            // Update Highlight Box
+            if (isPlaying) {
+                const hit = raycastVoxel();
+                if (hit) {
+                    highlightBox.position.set(hit.x + 0.5, hit.y + 0.5, hit.z + 0.5);
+                    highlightBox.visible = true;
+                } else {
+                    highlightBox.visible = false;
+                }
             } else {
                 highlightBox.visible = false;
-            }
-
-            // --- CHARACTER ANIMATION ---
-            const hSpeed = Math.hypot(velocity.x, velocity.z);
-            let isMoving = hSpeed > 0.01 && isPlaying;
-            
-            if (isMoving) {
-                // Drastically slowed down multiplier for smooth walking
-                walkAnimTime += hSpeed * 6; 
-                const swing = Math.sin(walkAnimTime) * 0.5;
-                leftArmPivot.rotation.x = swing;
-                rightArmPivot.rotation.x = -swing;
-                leftLegPivot.rotation.x = -swing;
-                rightLegPivot.rotation.x = swing;
-            } else {
-                leftArmPivot.rotation.x *= 0.8; rightArmPivot.rotation.x *= 0.8;
-                leftLegPivot.rotation.x *= 0.8; rightLegPivot.rotation.x *= 0.8;
-            }
-
-            // --- VIEW BOBBING & SWING (1st Person) ---
-            let bobX = 0, bobY = 0;
-            let armBobX = 0, armBobY = 0;
-
-            if (isMoving && onGround) {
-                // Smooth sine waves (Figure-8), NO sharp Math.abs bounces
-                bobX = Math.cos(walkAnimTime) * 0.015; 
-                bobY = Math.sin(walkAnimTime * 2) * 0.015; 
-                
-                // Arm smoothly sways with the cycle
-                armBobX = Math.cos(walkAnimTime) * 0.04;
-                armBobY = Math.sin(walkAnimTime * 2) * 0.03;
-            } else {
-                // Gentle idle breathe
-                armBobY = Math.sin(Date.now() * 0.002) * 0.005;
-            }
-
-            // Keep hand locked to bottom right + smooth bob offsets
-            fpArmHolder.position.x = 0.65 + armBobX;
-            fpArmHolder.position.y = -0.6 - armBobY;
-
-            // Controlled Punch Animation
-            if (swingTime > 0) {
-                swingTime += 0.15; 
-                if (swingTime >= 1.0) swingTime = 0;
-                
-                const swingProgress = Math.sin(Math.sqrt(swingTime) * Math.PI);
-                
-                fpArmPivot.rotation.x = -swingProgress * 0.6; 
-                fpArmPivot.rotation.z = -swingProgress * 0.05; 
-            } else {
-                // Return to rest smoothly
-                fpArmPivot.rotation.x = lerp(fpArmPivot.rotation.x, 0, 0.3);
-                fpArmPivot.rotation.z = lerp(fpArmPivot.rotation.z, 0, 0.3);
-            }
-
-            // --- CAMERA & VISIBILITY STACK ---
-            const eyeHeight = 1.62;
-
-            if (viewMode === 0) { // 1st Person
-                camera.position.set(player.position.x, player.position.y + eyeHeight + bobY, player.position.z);
-                camera.rotation.y = yaw; 
-                camera.rotation.x = pitch;
-                camera.rotation.z = bobX * 0.15; // Drastically reduced tilt (No more earthquake)
-                
-                playerModel.visible = false; 
-                fpArmHolder.visible = true;
-            } else if (viewMode === 1) { // 3rd Person (Rear)
-                const dist = 3.0;
-                const camX = player.position.x - Math.sin(yaw) * Math.cos(pitch) * dist;
-                const camY = player.position.y + eyeHeight + Math.sin(pitch) * dist;
-                const camZ = player.position.z - Math.cos(yaw) * Math.cos(pitch) * dist;
-                camera.position.set(camX, camY, camZ);
-                
-                camera.rotation.y = yaw; 
-                camera.rotation.x = pitch;
-                camera.rotation.z = 0;
-                
-                playerModel.visible = true; 
-                fpArmHolder.visible = false;
-                player.rotation.y = yaw; 
-                headPivot.rotation.x = pitch;
-            } else if (viewMode === 2) { // 3rd Person (Frontal)
-                const dist = 3.0;
-                const camX = player.position.x + Math.sin(yaw) * Math.cos(pitch) * dist;
-                const camY = player.position.y + eyeHeight + Math.sin(pitch) * dist;
-                const camZ = player.position.z + Math.cos(yaw) * Math.cos(pitch) * dist;
-                camera.position.set(camX, camY, camZ);
-                
-                camera.rotation.y = yaw + Math.PI; 
-                camera.rotation.x = pitch;
-                camera.rotation.z = 0;
-                
-                playerModel.visible = true; 
-                fpArmHolder.visible = false;
-                player.rotation.y = yaw + Math.PI; 
-                headPivot.rotation.x = pitch;
             }
 
             renderer.render(scene, camera);
@@ -717,7 +572,7 @@
 
         // Initial Spawn
         const spawnNoise = fbm(0 * 0.05, 0 * 0.05);
-        player.position.set(0.5, Math.floor(spawnNoise * 16) + 33, 0.5);
+        camera.position.set(0.5, Math.floor(spawnNoise * 16) + 33 + 1.62, 0.5); // 33 is top block, +1.62 is eye height
         updateChunks();
         while(chunkQueue.length > 0) {
             const { cx, cz } = chunkQueue.shift();
