@@ -401,19 +401,19 @@
         playerModel.add(headPivot, bodyPivot, leftArmPivot, rightArmPivot, leftLegPivot, rightLegPivot);
         player.add(playerModel);
 
-        // 1st Person Viewmodel Arm (Tilted exactly like Minecraft)
+        // 1st Person Viewmodel Arm (Matches real Minecraft proportions)
         const fpArmHolder = new THREE.Group();
-        fpArmHolder.position.set(0.4, -0.4, -0.6); // Positioned at bottom right of screen
-        fpArmHolder.rotation.y = -Math.PI / 4; // Angle inward so you see the side of the arm
-        fpArmHolder.rotation.z = Math.PI / 8;  // Tilt outward slightly
-        
+        // Pushed further right, lower, and slightly further back
+        fpArmHolder.position.set(0.65, -0.6, -0.8); 
+        fpArmHolder.rotation.y = -Math.PI / 6;
+
         const fpArmPivot = new THREE.Group();
-        const fpRestAngle = -Math.PI / 6; // Slight forward resting angle
-        fpArmPivot.rotation.x = fpRestAngle;
+        fpArmPivot.position.set(0, -0.2, 0.1); 
         fpArmHolder.add(fpArmPivot);
         
-        const fpArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.75, 0.25), getMaterial(texShirt));
-        fpArmMesh.position.y = -0.375; // Center of arm
+        // Scaled the geometry down to look like the screenshot
+        const fpArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.6, 0.2), getMaterial(texSkin));
+        fpArmMesh.position.set(0, 0.3, -0.1); 
         fpArmPivot.add(fpArmMesh);
         camera.add(fpArmHolder);
 
@@ -616,7 +616,8 @@
             let isMoving = hSpeed > 0.01 && isPlaying;
             
             if (isMoving) {
-                walkAnimTime += hSpeed * 25;
+                // Drastically slowed down multiplier for smooth walking
+                walkAnimTime += hSpeed * 6; 
                 const swing = Math.sin(walkAnimTime) * 0.5;
                 leftArmPivot.rotation.x = swing;
                 rightArmPivot.rotation.x = -swing;
@@ -627,46 +628,83 @@
                 leftLegPivot.rotation.x *= 0.8; rightLegPivot.rotation.x *= 0.8;
             }
 
-            // Swing Animation
-            if (swingTime > 0) {
-                swingTime += 0.15;
-                if (swingTime >= 1.0) swingTime = 0;
-                const swingCurve = Math.sin(swingTime * Math.PI);
-                fpArmPivot.rotation.x = fpRestAngle - swingCurve * 1.8; // Swing from resting angle forward
-                rightArmPivot.rotation.x = -swingCurve * 1.8;
+            // --- VIEW BOBBING & SWING (1st Person) ---
+            let bobX = 0, bobY = 0;
+            let armBobX = 0, armBobY = 0;
+
+            if (isMoving && onGround) {
+                // Smooth sine waves (Figure-8), NO sharp Math.abs bounces
+                bobX = Math.cos(walkAnimTime) * 0.015; 
+                bobY = Math.sin(walkAnimTime * 2) * 0.015; 
+                
+                // Arm smoothly sways with the cycle
+                armBobX = Math.cos(walkAnimTime) * 0.04;
+                armBobY = Math.sin(walkAnimTime * 2) * 0.03;
             } else {
-                fpArmPivot.rotation.x = lerp(fpArmPivot.rotation.x, fpRestAngle, 0.2); // Lerp back to rest
+                // Gentle idle breathe
+                armBobY = Math.sin(Date.now() * 0.002) * 0.005;
             }
 
-            // --- CAMERA & VISIBILITY ---
-            const eyeHeight = 1.62;
-            let bobY = 0;
-            if (isMoving && viewMode === 0) {
-                bobY = Math.abs(Math.sin(walkAnimTime)) * 0.03;
+            // Keep hand locked to bottom right + smooth bob offsets
+            fpArmHolder.position.x = 0.65 + armBobX;
+            fpArmHolder.position.y = -0.6 - armBobY;
+
+            // Controlled Punch Animation
+            if (swingTime > 0) {
+                swingTime += 0.15; 
+                if (swingTime >= 1.0) swingTime = 0;
+                
+                const swingProgress = Math.sin(Math.sqrt(swingTime) * Math.PI);
+                
+                fpArmPivot.rotation.x = -swingProgress * 0.6; 
+                fpArmPivot.rotation.z = -swingProgress * 0.05; 
+            } else {
+                // Return to rest smoothly
+                fpArmPivot.rotation.x = lerp(fpArmPivot.rotation.x, 0, 0.3);
+                fpArmPivot.rotation.z = lerp(fpArmPivot.rotation.z, 0, 0.3);
             }
+
+            // --- CAMERA & VISIBILITY STACK ---
+            const eyeHeight = 1.62;
 
             if (viewMode === 0) { // 1st Person
                 camera.position.set(player.position.x, player.position.y + eyeHeight + bobY, player.position.z);
-                camera.rotation.y = yaw; camera.rotation.x = pitch;
-                playerModel.visible = false; fpArmHolder.visible = true;
-            } else if (viewMode === 1) { // 3rd Back
+                camera.rotation.y = yaw; 
+                camera.rotation.x = pitch;
+                camera.rotation.z = bobX * 0.15; // Drastically reduced tilt (No more earthquake)
+                
+                playerModel.visible = false; 
+                fpArmHolder.visible = true;
+            } else if (viewMode === 1) { // 3rd Person (Rear)
                 const dist = 3.0;
                 const camX = player.position.x - Math.sin(yaw) * Math.cos(pitch) * dist;
                 const camY = player.position.y + eyeHeight + Math.sin(pitch) * dist;
                 const camZ = player.position.z - Math.cos(yaw) * Math.cos(pitch) * dist;
                 camera.position.set(camX, camY, camZ);
-                camera.rotation.y = yaw; camera.rotation.x = pitch;
-                playerModel.visible = true; fpArmHolder.visible = false;
-                player.rotation.y = yaw; headPivot.rotation.x = pitch;
-            } else if (viewMode === 2) { // 3rd Front
+                
+                camera.rotation.y = yaw; 
+                camera.rotation.x = pitch;
+                camera.rotation.z = 0;
+                
+                playerModel.visible = true; 
+                fpArmHolder.visible = false;
+                player.rotation.y = yaw; 
+                headPivot.rotation.x = pitch;
+            } else if (viewMode === 2) { // 3rd Person (Frontal)
                 const dist = 3.0;
                 const camX = player.position.x + Math.sin(yaw) * Math.cos(pitch) * dist;
                 const camY = player.position.y + eyeHeight + Math.sin(pitch) * dist;
                 const camZ = player.position.z + Math.cos(yaw) * Math.cos(pitch) * dist;
                 camera.position.set(camX, camY, camZ);
-                camera.rotation.y = yaw + Math.PI; camera.rotation.x = pitch;
-                playerModel.visible = true; fpArmHolder.visible = false;
-                player.rotation.y = yaw + Math.PI; headPivot.rotation.x = pitch;
+                
+                camera.rotation.y = yaw + Math.PI; 
+                camera.rotation.x = pitch;
+                camera.rotation.z = 0;
+                
+                playerModel.visible = true; 
+                fpArmHolder.visible = false;
+                player.rotation.y = yaw + Math.PI; 
+                headPivot.rotation.x = pitch;
             }
 
             renderer.render(scene, camera);
