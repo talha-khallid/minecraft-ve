@@ -12,7 +12,7 @@
             position: absolute; top: 10px; left: 10px;
             background: rgba(0,0,0,0.5); color: #55FF55; 
             padding: 5px 10px; font-size: 16px; z-index: 10;
-            border-radius: 4px;
+            border-radius: 4px; display: none;
         }
 
         #crosshair {
@@ -28,12 +28,12 @@
         #hud {
             position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
             background: rgba(0,0,0,0.5); color: white; padding: 10px 20px; border-radius: 5px;
-            font-size: 14px; z-index: 10; text-align: center;
+            font-size: 14px; z-index: 10; text-align: center; display: none;
         }
         #hotbar {
             position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
             display: flex; gap: 4px; z-index: 10; padding: 4px;
-            background: rgba(0,0,0,0.5); border-radius: 4px;
+            background: rgba(0,0,0,0.5); border-radius: 4px; display: none;
         }
         .slot {
             width: 45px; height: 45px; background: rgba(255,255,255,0.1);
@@ -43,29 +43,80 @@
         .slot img { width: 32px; height: 32px; image-rendering: pixelated; }
         .slot.active { border-color: white; background: rgba(255,255,255,0.4); box-shadow: 0 0 10px rgba(255,255,255,0.3); }
         
-        #overlay {
+        /* --- MINECRAFT UI THEME --- */
+        .mc-screen {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); color: white;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 100; cursor: pointer; text-align: center;
+            display: flex; justify-content: center; align-items: center; z-index: 100;
+            flex-direction: column;
         }
-        h1 { font-size: 3.5em; margin-bottom: 10px; text-shadow: 3px 3px 0px #555; letter-spacing: 2px; }
-        p { font-size: 1.2em; margin: 5px 0; }
-        .key { display: inline-block; background: #333; padding: 2px 8px; border-radius: 4px; border: 1px solid #555; margin: 0 2px; }
+        .mc-panel {
+            width: 400px; padding: 30px; background: rgba(0,0,0,0.7);
+            border: 2px solid #000; text-align: center; color: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+        .mc-title {
+            font-size: 3.5em; color: #fff; text-shadow: 3px 3px 0 #3f3f3f;
+            margin-bottom: 30px; letter-spacing: 2px; font-weight: bold;
+        }
+        .mc-btn {
+            width: 100%; padding: 12px; margin: 6px 0; background: #6a6a6a;
+            border: 2px solid #000; border-top-color: #8a8a8a; border-left-color: #8a8a8a;
+            border-right-color: #4a4a4a; border-bottom-color: #4a4a4a;
+            color: white; font-family: 'Courier New', monospace; font-size: 1.2em;
+            cursor: pointer; text-shadow: 1px 1px 0 #000; display: block;
+        }
+        .mc-btn:hover { background: #7a7a7a; }
+        .mc-btn:active {
+            border-top-color: #4a4a4a; border-left-color: #4a4a4a;
+            border-right-color: #8a8a8a; border-bottom-color: #8a8a8a;
+        }
+        .mc-slider { width: 100%; margin: 10px 0; accent-color: #fff; }
+        .mc-controls-list { text-align: left; margin: 20px 0; }
+        .mc-controls-list div { margin: 8px 0; font-size: 1.1em; }
+        .mc-key {
+            display: inline-block; background: #333; padding: 4px 10px; border-radius: 4px;
+            border: 1px solid #555; margin-right: 10px; min-width: 100px; text-align: center;
+        }
+        .mc-subtitle { font-size: 0.9em; opacity: 0.7; margin-top: 20px; }
     </style>
 </head>
 <body>
 
     <div id="fps">FPS: 0</div>
 
-    <div id="overlay">
-        <h1>VOXELCRAFT</h1>
-        <p>Press <span class="key">F2</span> or Click to Play</p>
-        <p style="font-size: 0.9em; opacity: 0.7; margin-top: 20px;">
-            <span class="key">WASD</span> Move | <span class="key">Space</span> Jump | <span class="key">Mouse</span> Look<br>
-            <span class="key">L-Click</span> Break | <span class="key">R-Click</span> Place<br>
-            <span class="key">1-5</span> or <span class="key">Scroll</span> Select Block | <span class="key">F2</span> Pause
-        </p>
+    <div id="menu" class="mc-screen">
+        <div id="main-menu" class="mc-panel">
+            <h1 class="mc-title">VOXELCRAFT</h1>
+            <button class="mc-btn" id="btn-start">Start Game</button>
+            <button class="mc-btn" id="btn-settings">Settings</button>
+            <button class="mc-btn" id="btn-controls">Controls</button>
+            <p class="mc-subtitle">Built with Three.js</p>
+        </div>
+
+        <div id="settings-menu" class="mc-panel" style="display:none;">
+            <h1 class="mc-title" style="font-size: 2em;">Settings</h1>
+            <div style="text-align: left; margin: 20px 0;">
+                <label>FOV: <span id="fov-val">75</span></label>
+                <input type="range" id="set-fov" min="50" max="110" value="75" class="mc-slider">
+                <label>Mouse Sensitivity: <span id="sens-val">2.0</span></label>
+                <input type="range" id="set-sens" min="1" max="20" value="2" class="mc-slider">
+            </div>
+            <button class="mc-btn" id="btn-back-settings">Done</button>
+        </div>
+
+        <div id="controls-menu" class="mc-panel" style="display:none;">
+            <h1 class="mc-title" style="font-size: 2em;">Controls</h1>
+            <div class="mc-controls-list">
+                <div><span class="mc-key">W A S D</span> Move</div>
+                <div><span class="mc-key">Space</span> Jump</div>
+                <div><span class="mc-key">Mouse</span> Look around</div>
+                <div><span class="mc-key">L-Click</span> Break Block</div>
+                <div><span class="mc-key">R-Click</span> Place Block</div>
+                <div><span class="mc-key">1-5 / Scroll</span> Select Block</div>
+                <div><span class="mc-key">F2</span> Pause Game</div>
+            </div>
+            <button class="mc-btn" id="btn-back-controls">Done</button>
+        </div>
     </div>
 
     <div id="crosshair"></div>
@@ -307,7 +358,7 @@
             geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
             geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
             geometry.setIndex(indices);
-            geometry.computeBoundingSphere(); // OPTIMIZATION: Helps GPU cull hidden chunks
+            geometry.computeBoundingSphere(); // OPTIMIZATION
             const mesh = new THREE.Mesh(geometry, chunkMaterial);
             mesh.position.set(chunk.cx * CHUNK_SIZE, 0, chunk.cz * CHUNK_SIZE);
             scene.add(mesh); chunk.mesh = mesh;
@@ -345,28 +396,91 @@
             }
         }
 
-        // --- 8. CONTROLS & POINTER LOCK ---
+        // --- 8. MENU LOGIC & SETTINGS ---
+        let mouseSens = 2.0;
+        function generateDirtBackground() {
+            const c = document.createElement('canvas');
+            c.width = 32; c.height = 32;
+            const ctx = c.getContext('2d');
+            ctx.fillStyle = '#6C5034'; ctx.fillRect(0, 0, 32, 32);
+            for(let i=0; i<150; i++) {
+                ctx.fillStyle = Math.random() > 0.5 ? '#5a4029' : '#7a6040';
+                ctx.fillRect(Math.floor(Math.random()*32), Math.floor(Math.random()*32), 2, 2);
+            }
+            document.getElementById('menu').style.backgroundImage = `url(${c.toDataURL()})`;
+            document.getElementById('menu').style.backgroundSize = '32px 32px';
+        }
+        generateDirtBackground();
+
+        document.getElementById('btn-start').addEventListener('click', startGame);
+        document.getElementById('btn-settings').addEventListener('click', () => {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('settings-menu').style.display = 'block';
+        });
+        document.getElementById('btn-controls').addEventListener('click', () => {
+            document.getElementById('main-menu').style.display = 'none';
+            document.getElementById('controls-menu').style.display = 'block';
+        });
+        document.getElementById('btn-back-settings').addEventListener('click', () => {
+            document.getElementById('settings-menu').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'block';
+        });
+        document.getElementById('btn-back-controls').addEventListener('click', () => {
+            document.getElementById('controls-menu').style.display = 'none';
+            document.getElementById('main-menu').style.display = 'block';
+        });
+
+        document.getElementById('set-fov').addEventListener('input', (e) => {
+            const val = e.target.value;
+            document.getElementById('fov-val').innerText = val;
+            camera.fov = parseInt(val);
+            camera.updateProjectionMatrix();
+        });
+        document.getElementById('set-sens').addEventListener('input', (e) => {
+            const val = e.target.value;
+            document.getElementById('sens-val').innerText = parseFloat(val).toFixed(1);
+            mouseSens = parseFloat(val);
+        });
+
+        // --- 9. CONTROLS & POINTER LOCK ---
         let isPlaying = false;
         let yaw = 0, pitch = 0;
-        const overlay = document.getElementById('overlay');
         const crosshair = document.getElementById('crosshair');
+        const hud = document.getElementById('hud');
+        const hotbar = document.getElementById('hotbar');
+        const fpsDiv = document.getElementById('fps');
         
         function startGame() {
-            isPlaying = true; overlay.style.display = 'none'; crosshair.style.display = 'block'; document.body.style.cursor = 'none';
+            isPlaying = true;
+            document.getElementById('menu').style.display = 'none';
+            crosshair.style.display = 'block';
+            hud.style.display = 'block';
+            hotbar.style.display = 'flex';
+            fpsDiv.style.display = 'block';
+            document.body.style.cursor = 'none';
             try { renderer.domElement.requestPointerLock(); } catch (err) {}
         }
         function pauseGame() {
-            isPlaying = false; overlay.style.display = 'flex'; crosshair.style.display = 'none'; document.body.style.cursor = 'default';
+            isPlaying = false;
+            document.getElementById('menu').style.display = 'flex';
+            document.getElementById('main-menu').style.display = 'block';
+            document.getElementById('settings-menu').style.display = 'none';
+            document.getElementById('controls-menu').style.display = 'none';
+            crosshair.style.display = 'none';
+            hud.style.display = 'none';
+            hotbar.style.display = 'none';
+            fpsDiv.style.display = 'none';
+            document.body.style.cursor = 'default';
             try { if (document.exitPointerLock) document.exitPointerLock(); } catch (err) {}
         }
         window.addEventListener('keydown', (e) => {
             if (e.code === 'F2') { e.preventDefault(); if (isPlaying) pauseGame(); else startGame(); }
         });
-        overlay.addEventListener('click', () => { if (!isPlaying) startGame(); });
         document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement !== renderer.domElement && isPlaying) pauseGame(); });
         document.addEventListener('mousemove', (e) => {
             if (isPlaying) {
-                yaw -= e.movementX * 0.002; pitch -= e.movementY * 0.002;
+                yaw -= e.movementX * 0.001 * mouseSens; 
+                pitch -= e.movementY * 0.001 * mouseSens;
                 pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch));
             }
         });
@@ -410,11 +524,13 @@
             document.getElementById('hud').innerText = `Selected: ${blockNames[index]}`;
         }
 
-        // --- 9. CUSTOM VOXEL RAYCASTER (Instant, no lag) ---
+        // --- 10. FIXED CUSTOM VOXEL RAYCASTER ---
         function raycastVoxel() {
             const origin = camera.position.clone();
-            const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-            const step = 0.05;
+            const dir = new THREE.Vector3();
+            camera.getWorldDirection(dir); // Gets exact camera direction
+            
+            const step = 0.1; // 0.1 is safe to prevent skipping blocks
             let prevBx = Math.floor(origin.x), prevBy = Math.floor(origin.y), prevBz = Math.floor(origin.z);
             
             for (let t = 0; t < 6; t += step) {
@@ -424,7 +540,8 @@
                 if (bx !== prevBx || by !== prevBy || bz !== prevBz) {
                     const block = getWorldBlock(bx, by, bz);
                     if (block !== AIR) {
-                        return { x: bx, y: by, z: bz, nx: bx - prevBx, ny: by - prevBy, nz: bz - prevBz };
+                        // FIXED NORMAL: Direction from hit block back to the previous air block
+                        return { x: bx, y: by, z: bz, nx: prevBx - bx, ny: prevBy - by, nz: prevBz - bz };
                     }
                     prevBx = bx; prevBy = by; prevBz = bz;
                 }
@@ -439,7 +556,7 @@
         highlightBox.visible = false;
         scene.add(highlightBox);
 
-        // --- 10. BLOCK INTERACTION ---
+        // --- 11. BLOCK INTERACTION ---
         document.addEventListener('mousedown', (e) => {
             if (!isPlaying) return;
             const hit = raycastVoxel();
@@ -450,9 +567,9 @@
                     }
                 } else if (e.button === 2) { // Place
                     const placePos = { x: hit.x + hit.nx, y: hit.y + hit.ny, z: hit.z + hit.nz };
-                    // STRICT MINECRAFT PLACEMENT CHECK (Don't place in own feet)
+                    // STRICT MINECRAFT PLACEMENT CHECK
                     const p_minX = camera.position.x - 0.3, p_maxX = camera.position.x + 0.3;
-                    const p_minY = camera.position.y - 1.62, p_maxY = camera.position.y - 1.62 + 1.8;
+                    const p_minY = camera.position.y - 1.62, p_maxY = camera.position.y + 0.18; // 1.8 total height
                     const p_minZ = camera.position.z - 0.3, p_maxZ = camera.position.z + 0.3;
                     const b_minX = placePos.x, b_maxX = placePos.x + 1;
                     const b_minY = placePos.y, b_maxY = placePos.y + 1;
@@ -466,7 +583,7 @@
         });
         document.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // --- 11. EXACT MINECRAFT PHYSICS ---
+        // --- 12. EXACT MINECRAFT PHYSICS ---
         function checkCollision(x, y, z) {
             const radius = 0.3; const totalHeight = 1.8;
             const feetY = y - 1.62;
@@ -483,11 +600,10 @@
             return false;
         }
 
-        // --- 12. ANIMATION & GAME LOOP ---
+        // --- 13. ANIMATION & GAME LOOP ---
         let lastTime = performance.now();
         let frames = 0;
         let fps = 0;
-        const fpsDiv = document.getElementById('fps');
 
         function animate() {
             requestAnimationFrame(animate);
@@ -533,7 +649,7 @@
 
                 if (move.jump && onGround) { velocity.y = 0.25; onGround = false; }
 
-                // Axis Sweeping (camera.position is the eye)
+                // Axis Sweeping
                 let newX = camera.position.x + velocity.x;
                 if (!checkCollision(newX, camera.position.y, camera.position.z)) camera.position.x = newX;
                 else velocity.x = 0;
